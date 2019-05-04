@@ -1,40 +1,16 @@
 import React from 'react'
 
-const context = React.createContext(null)
+const Context = React.createContext(null)
 
-/**
- * Provider for exposing the PIXI.Application
- *
- * @param {Function} children
- * @param {Object} app from context
- * @returns {React.Component}
- * @usage:
- *
- *   const App = () => (
- *     <Stage>
- *       <Provider>
- *         {app => <MyComponent app={app} />}
- *       </Provider>
- *     </Stage>
- *   )
- *
- */
-const Provider = context.Consumer
+const AppProvider = Context.Provider
+const AppConsumer = Context.Consumer
 
-/**
- * Or as a Higher Order Component
- *
- * @param {React.Component|Function} BaseComponent
- * @returns {React.Component|Function}
- * @usage
- *
- *  const App = withPIXIApp(({ app ) => ())
- *
- */
 const withPixiApp = BaseComponent => {
-  const wrapper = props => <context.Consumer>{app => <BaseComponent {...props} app={app} />}</context.Consumer>
+  const wrapper = React.forwardRef((props, ref) => (
+    <AppConsumer>{app => <BaseComponent {...props} ref={ref} app={app} />}</AppConsumer>
+  ))
   wrapper.displayName = `withPIXIApp(${BaseComponent.displayName || BaseComponent.name})`
   return wrapper
 }
 
-export { withPixiApp, Provider, context }
+export { withPixiApp, AppProvider, AppConsumer, Context }

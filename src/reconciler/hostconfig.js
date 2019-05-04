@@ -8,9 +8,13 @@
  * -------------------------------------------
  */
 
-import idx from 'idx/lib/idx'
 import invariant from 'fbjs/lib/invariant'
 import performanceNow from 'performance-now'
+import {
+  unstable_scheduleCallback as scheduleDeferredCallback,
+  unstable_cancelCallback as cancelDeferredCallback,
+} from 'scheduler'
+
 import { createElement } from '../utils/element'
 import { CHILDREN, applyDefaultProps } from '../utils/props'
 
@@ -108,6 +112,16 @@ export default {
 
   createInstance: createElement,
 
+  hideInstance(instance) {
+    instance.visible = false
+  },
+
+  unhideInstance(instance, props) {
+    const visible = props !== undefined && props !== null && props.hasOwnProperty('visible') ? props.visible : true
+
+    instance.visible = visible
+  },
+
   appendInitialChild: appendChild,
 
   finalizeInitialChildren(wordElement, type, props) {
@@ -159,7 +173,7 @@ export default {
   insertInContainerBefore: insertBefore,
 
   commitUpdate(instance, updatePayload, type, oldProps, newProps) {
-    let applyProps = idx(instance, _ => _.applyProps)
+    let applyProps = instance && instance.applyProps
     if (typeof applyProps !== 'function') {
       applyProps = applyDefaultProps
     }
@@ -177,4 +191,10 @@ export default {
   resetTextContent(pixiElement) {
     // noop
   },
+
+  schedulePassiveEffects: scheduleDeferredCallback,
+
+  cancelPassiveEffects: cancelDeferredCallback,
+
+  scheduleDeferredCallback,
 }

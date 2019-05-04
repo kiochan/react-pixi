@@ -28,7 +28,7 @@ export const PROPS_DISPLAY_OBJECT = {
   alpha: 1,
   buttonMode: false,
   cacheAsBitmap: false,
-  cursor: 'auto',
+  cursor: null,
   filterArea: null,
   filters: null,
   hitArea: null,
@@ -51,19 +51,29 @@ export const PROPS_DISPLAY_OBJECT = {
  * Can be either texture or image
  *
  * @param {string} elementType
- * @param {PIXI.Texture} texture
+ * @param {PIXI.Texture|undefined} texture
  * @param {string|undefined} image
+ * @param {boolean|undefined} crossorigin
  * @returns {PIXI.Texture}
  */
-export const getTextureFromProps = (elementType, { texture = undefined, image = undefined }) => {
+export const getTextureFromProps = (
+  elementType,
+  { texture = undefined, image = undefined, crossorigin = undefined }
+) => {
   if (image) {
     invariant(typeof image === 'string', elementType + ' image needs to be a string, got `%s`', typeof image)
-    return PIXI.Texture.fromImage(image)
+    const args = [image]
+    if (crossorigin) {
+      args.push(crossorigin)
+    }
+    return PIXI.Texture.fromImage(...args)
   }
 
   invariant(texture instanceof PIXI.Texture, elementType + ' texture needs to be typeof `PIXI.Texture`')
   return texture
 }
+
+const filterProps = not(hasKey([...Object.keys(PROPS_RESERVED), ...eventHandlers]))
 
 /**
  * Apply default props on Display Object instance (which are all components)
@@ -80,27 +90,41 @@ export function applyDefaultProps(instance, oldProps, newProps) {
   )
 
   // update event handlers
-  eventHandlers.forEach(function(evt) {
-    isFunction(oldProps[evt], instance.removeListener) && instance.removeListener(evt, oldProps[evt])
-    isFunction(newProps[evt], instance.on) && instance.on(evt, newProps[evt])
-  })
+  if (!newProps.ignoreEvents) {
+    eventHandlers.forEach(function(evt) {
+      isFunction(oldProps[evt], instance.removeListener) && instance.removeListener(evt, oldProps[evt])
+      isFunction(newProps[evt], instance.on) && instance.on(evt, newProps[evt])
+    })
+  }
 
-  let props = Object.keys(newProps || {})
-    .filter(not(hasKey(PROPS_RESERVED)))
-    .filter(not(hasKey(eventHandlers)))
+  const newPropKeys = Object.keys(newProps || {})
 
-  props.forEach(prop => {
+  // hard overwrite all props? can speed up performance
+  if (newProps.overwriteProps) {
+    for (let i = 0; i < newPropKeys.length; i++) {
+      const p = newPropKeys[i]
+      if (oldProps[p] !== newProps[p]) {
+        setValue(instance, p, newProps[p])
+      }
+    }
+    return
+  }
+
+  const props = newPropKeys.filter(filterProps)
+
+  for (let i = 0; i < props.length; i++) {
+    const prop = props[i]
     const value = newProps[prop]
 
     if (!isNil(value)) {
       // set value if defined
       setValue(instance, prop, value)
-    } else if (!isNil(instance[prop]) && !isNil(PROPS_DISPLAY_OBJECT[prop])) {
+    } else if (!isNil(instance[prop]) && prop in PROPS_DISPLAY_OBJECT) {
       // is a default value, use that
       console.warn(`setting default value: ${prop}, from: ${instance[prop]} to: ${value} for`, instance)
       setValue(instance, prop, PROPS_DISPLAY_OBJECT[prop])
     } else {
       console.warn(`ignoring prop: ${prop}, from ${instance[prop]} to ${value} for`, instance)
     }
-  })
+  }
 }

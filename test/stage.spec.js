@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useState, useLayoutEffect } from 'react'
 import * as PIXI from 'pixi.js'
 import renderer from 'react-test-renderer'
 import { PixiFiber, PACKAGE_NAME, VERSION } from '../src/reconciler'
 import { runningInBrowser } from '../src/helpers'
-import { Stage, Provider, withPixiApp, Container, Text } from '../src'
-import { context } from '../src/stage/provider'
+import { Stage, Container, Text } from '../src'
+import { Context } from '../src/stage/provider'
+import { useTick } from '../src/hooks'
 import { getCanvasProps } from '../src/stage'
 import { mockToSpy } from './__utils__/mock'
 
@@ -162,9 +163,12 @@ describe('stage', () => {
 
     expect(PixiFiber.updateContainer).toHaveBeenCalledTimes(1)
     expect(PixiFiber.updateContainer).toHaveBeenCalledWith(
-      <context.Provider value={instance.app}>
+      <Context.Provider value={instance.app}>
         <Text text="Hello World!" />
-      </context.Provider>, instance.mountNode, instance)
+      </Context.Provider>,
+      instance.mountNode,
+      instance
+    )
   })
 
   test('call PixiFiber.injectIntoDevtools on componentDidMount', () => {
@@ -214,6 +218,18 @@ describe('stage', () => {
       expect(app.ticker.started).toBeFalsy()
     })
 
+    test('ticker to be toggable', async () => {
+      const el = renderer.create(<Stage raf={false} />)
+      const app = el.getInstance().app
+      expect(app.ticker.started).toBeFalsy()
+
+      el.update(<Stage raf={true} />)
+      expect(app.ticker.started).toBeTruthy()
+
+      el.update(<Stage raf={false} />)
+      expect(app.ticker.started).toBeFalsy()
+    })
+
     test('render stage on component update with raf to false', () => {
       const el = renderer.create(<Stage raf={false} />)
       const app = el.getInstance().app
@@ -235,45 +251,133 @@ describe('stage', () => {
     })
   })
 
-  describe('provider', () => {
-    test('pass down app to child component', () => {
-      const fn = jest.fn(() => <Container />)
-      const el = renderer.create(
-        <Stage>
-          <Container>
-            <Container>
-              <Container>
-                <Provider>{fn}</Provider>
-              </Container>
-            </Container>
-          </Container>
-        </Stage>
-      )
+  describe('hook `useTick`', function() {
+    test('throw error no context found', () => {
+      const Comp = () => {
+        useTick(() => {})
+        return <Container />
+      }
 
-      const instance = el.getInstance()
-
-      expect(fn).toHaveBeenCalledTimes(1)
-      expect(fn).toHaveBeenCalledWith(instance.app)
-    })
-  })
-
-  describe('provider as a higher order component', () => {
-    test('pass down app to child component', () => {
-      const fn = jest.fn(() => <Container />)
-      const Comp = withPixiApp(({ app }) => fn(app))
-
-      const el = renderer.create(
-        <Stage>
+      const createApp = () =>
+        renderer.create(
           <Container>
             <Comp />
           </Container>
+        )
+
+      expect(createApp).toThrow(
+        'No Context found with `PIXI.Application`. Make sure to wrap component with `AppProvider`'
+      )
+    })
+
+    test('mount & unmount once', () => {
+      let app
+
+      const Comp = () => {
+        useTick(() => {})
+        return <Container />
+      }
+
+      const renderStage = (Comp) => (
+        <Stage onMount={_app => { app = _app }}>
+          <Container>{ Comp }</Container>
         </Stage>
       )
 
-      const instance = el.getInstance()
+      const render = renderer.create(
+        renderStage()
+      )
 
-      expect(fn).toHaveBeenCalledTimes(1)
-      expect(fn).toHaveBeenCalledWith(instance.app)
+      jest.spyOn(app.ticker, 'add')
+      jest.spyOn(app.ticker, 'remove')
+
+      render.update(renderStage(<Comp />))
+      render.update(renderStage(<Comp />))
+
+      expect(app.ticker.add).toHaveBeenCalledTimes(1)
+      expect(app.ticker.remove).toHaveBeenCalledTimes(0)
+
+      render.update(renderStage())
+
+      expect(app.ticker.remove).toHaveBeenCalledTimes(1)
     })
+
+    test('update state', () => {
+      const fn = jest.fn()
+
+      const Comp = () => {
+        const [x, setX] = useState(0)
+
+        useTick(() => setX(x + 1))
+        useLayoutEffect(() => fn(x), [x])
+
+        return <Container />
+      }
+
+      const renderStage = () => (
+        <Stage>
+          <Comp />
+        </Stage>
+      )
+
+      const el = renderer.create(renderStage())
+      const instance = el.getInstance().app
+
+      const update = () => {
+        instance.ticker.update(Date.now())
+        el.update(renderStage())
+      }
+
+      update()
+      update()
+      update()
+
+      expect(fn.mock.calls.map(call => call[0])).toEqual([0, 1, 2, 3])
+    })
+
+    test('enable/disable useTick', () => {
+      const fn = jest.fn()
+
+      const Comp = ({ enabled = true }) => {
+        const [x, setX] = useState(0)
+        useTick(() => setX(x + 1), enabled)
+        useLayoutEffect(() => fn(x), [x])
+        
+        return null
+      }
+
+      const renderStage = (enabled) => (
+        <Stage>
+          <Comp enabled={enabled} />
+        </Stage>
+      )
+
+      const el = renderer.create(renderStage(false))
+      const instance = el.getInstance().app
+
+      const update = (enabled) => {
+        // set enabled
+        el.update(renderStage(enabled))
+
+        // update tick
+        instance.ticker.update(Date.now())
+
+        // again enabled to catch the tick
+        el.update(renderStage(enabled))
+      }
+
+      update(false)
+      update(true) // 1
+      update(false)
+      update(false)
+      update(true) // 2
+      update(true)
+
+      expect(fn.mock.calls.map(call => call[0])).toEqual([
+        0, // initial
+        1,
+        2,
+        3
+      ])})
   })
 })

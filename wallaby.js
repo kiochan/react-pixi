@@ -1,6 +1,6 @@
 module.exports = function(wallaby) {
   return {
-    files: ['src/**/*.js', 'package.json', 'test/__fixtures__/**/*', 'test/__utils__/**/*'],
+    files: ['src/**/*.js', 'package.json', 'test/__fixtures__/**/*', 'test/__utils__/**/*', 'test/bootstrap.js'],
     tests: ['test/**/*.js', '!test/bootstrap.js', '!test/__fixtures__/**/*', '!test/__utils__/**/*'],
 
     compilers: {
@@ -12,7 +12,5 @@ module.exports = function(wallaby) {
     },
 
     testFramework: 'jest',
-
-    debug: true,
   }
 }

@@ -6,7 +6,7 @@ import { PROPS_DISPLAY_OBJECT } from '../utils/props'
 import { runningInBrowser } from '../helpers'
 import { PixiFiber } from '../reconciler'
 import { injectDevtools } from '../render'
-import { context } from './provider'
+import { AppProvider } from './provider'
 
 const noop = () => {}
 
@@ -112,10 +112,9 @@ class Stage extends React.Component {
       view: this._canvas,
     })
 
-    if (!raf) {
-      this.app.ticker.stop()
-      this.app.ticker.autoStart = false
-    }
+    this.app.ticker.autoStart = false
+
+    this.app.ticker[raf ? 'start' : 'stop']()
 
     this.mountNode = PixiFiber.createContainer(this.app.stage)
     PixiFiber.updateContainer(this.getChildren(), this.mountNode, this)
@@ -127,11 +126,16 @@ class Stage extends React.Component {
   }
 
   componentDidUpdate(prevProps, prevState, prevContext) {
-    const { width, height } = this.props
+    const { width, height, raf } = this.props
 
     // handle resize
     if (prevProps.height !== height || prevProps.width !== width) {
       this.app.renderer.resize(width, height)
+    }
+
+    // handle raf change
+    if (prevProps.raf !== raf) {
+      this.app.ticker[raf ? 'start' : 'stop']()
     }
 
     // handle resolution ?
@@ -143,7 +147,7 @@ class Stage extends React.Component {
 
   getChildren() {
     const { children } = this.props
-    return <context.Provider value={this.app}>{children}</context.Provider>
+    return <AppProvider value={this.app}>{children}</AppProvider>
   }
 
   componentDidCatch(error, errorInfo) {
